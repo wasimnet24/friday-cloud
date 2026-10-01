@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<title>Friday</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#05060f;color:#eaf6ff;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+/* aurora background */
+#bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.5;animation:drift 14s ease-in-out infinite alternate}
+.b1{width:280px;height:280px;left:-80px;top:-60px;background:radial-gradient(circle,#ff2fb355,transparent 70%)}
+.b2{width:320px;height:320px;right:-100px;top:30%;background:radial-gradient(circle,#7b2ff744,transparent 70%);animation-delay:-5s}
+.b3{width:240px;height:240px;left:20%;bottom:-80px;background:radial-gradient(circle,#35e0ff33,transparent 70%);animation-delay:-9s}
+@keyframes drift{to{transform:translate(40px,30px) scale(1.12)}}
+#app{position:relative;z-index:1;display:flex;flex-direction:column;height:100dvh}
+/* header */
+header{display:flex;align-items:center;justify-content:space-between;
+padding:calc(12px + env(safe-area-inset-top)) 16px 8px;flex:none}
+.logo{font-size:15px;letter-spacing:5px;font-weight:700;
+background:linear-gradient(90deg,#35e0ff,#ff7ad9);-webkit-background-clip:text;background-clip:text;color:transparent}
+#status{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#9db8cc;
+background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+padding:6px 12px;border-radius:999px;backdrop-filter:blur(8px)}
+#status i{width:8px;height:8px;border-radius:50%;background:#3ddc84;box-shadow:0 0 8px #3ddc84;font-style:normal}
+#status.off i{background:#ff5d5d;box-shadow:0 0 8px #ff5d5d}
+#status2{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#9db8cc;
+background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+padding:6px 12px;border-radius:999px;backdrop-filter:blur(8px)}
+#status2 i{width:8px;height:8px;border-radius:50%;background:#ffb13d;box-shadow:0 0 8px #ffb13d;font-style:normal}
+#status2.on i{background:#3ddc84;box-shadow:0 0 8px #3ddc84}
+#status2.off i{background:#ff5d5d;box-shadow:0 0 8px #ff5d5d}
+/* hero */
+#hero{position:relative;height:215px;flex:none}
+#stage{position:absolute;inset:0;width:100%;height:100%}
+#wave{position:absolute;left:0;right:0;bottom:2px;height:34px;display:flex;align-items:center;
+justify-content:center;gap:3px;pointer-events:none}
+#wave b{width:3px;border-radius:2px;background:linear-gradient(180deg,#35e0ff,#ff7ad9);
+height:4px;transition:height .12s}
+/* chat */
+#chat{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:9px;scrollbar-width:none}
+#chat::-webkit-scrollbar{display:none}
+.msg{max-width:87%;padding:10px 14px;border-radius:17px;font-size:15px;line-height:1.5;
+animation:pop .18s ease-out;backdrop-filter:blur(10px)}
+@keyframes pop{from{transform:translateY(6px);opacity:0}}
+.me{align-self:flex-end;background:linear-gradient(135deg,rgba(20,74,125,.85),rgba(14,44,78,.85));
+border:1px solid rgba(53,224,255,.25);border-bottom-right-radius:5px}
+.friday{align-self:flex-start;background:rgba(255,255,255,.07);
+border:1px solid rgba(255,122,217,.22);border-bottom-left-radius:5px}
+.ts{display:block;font-size:10px;color:#7d93a8;margin-top:5px}
+.act{font-size:12px;color:#ff9de2;margin-top:6px;background:rgba(255,47,179,.1);
+border:1px solid rgba(255,47,179,.25);padding:5px 9px;border-radius:9px;display:inline-block}
+.typing{align-self:flex-start;color:#9db8cc;font-size:13px;letter-spacing:1px;
+display:flex;gap:4px;padding:10px 4px}
+.typing b{width:6px;height:6px;border-radius:50%;background:#ff7ad9;animation:bl 1s infinite}
+.typing b:nth-child(2){animation-delay:.15s}.typing b:nth-child(3){animation-delay:.3s}
+@keyframes bl{40%{transform:translateY(-5px);opacity:1}0%,80%,100%{opacity:.4}}
+/* quick actions */
+#quick{display:flex;gap:8px;padding:4px 14px 8px;overflow-x:auto;flex:none;scrollbar-width:none}
+#quick::-webkit-scrollbar{display:none}
+.q{flex:none;display:flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap;
+padding:9px 13px;border-radius:13px;background:rgba(255,255,255,.06);
+border:1px solid rgba(255,255,255,.12);color:#dcecff;backdrop-filter:blur(8px)}
+.q:active{transform:scale(.95)}
+.q.power{border-color:rgba(255,93,93,.5);color:#ffb3b3}
+/* composer */
+.row{display:flex;align-items:center;gap:8px;padding:0 16px 6px;font-size:12px;color:#9db8cc;flex:none}
+#bar{display:flex;gap:8px;padding:8px 14px calc(14px + env(safe-area-inset-bottom));flex:none}
+#tin{flex:1;min-width:0;font-size:15px;border-radius:16px;border:1px solid rgba(255,255,255,.14);
+background:rgba(255,255,255,.07);color:#eaf6ff;padding:13px 15px;backdrop-filter:blur(10px)}
+#tin:focus{outline:none;border-color:#ff7ad9}
+#mic,#send{font-size:17px;border-radius:16px;border:1px solid rgba(255,255,255,.14);
+background:rgba(255,255,255,.07);color:#eaf6ff;min-width:52px;backdrop-filter:blur(10px)}
+#mic:active,#send:active{transform:scale(.93)}
+#send{background:linear-gradient(135deg,#7b2ff7,#ff2fb3);border:none;font-size:16px}
+/* login */
+#login{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;
+justify-content:center;gap:14px;padding:30px;background:#05060f}
+#login h1{letter-spacing:7px;font-size:24px;font-weight:800;
+background:linear-gradient(90deg,#35e0ff,#ff7ad9);-webkit-background-clip:text;background-clip:text;color:transparent}
+#login p{color:#9db8cc;font-size:13px;text-align:center;line-height:1.6}
+#login input{width:100%;max-width:320px;font-size:15px;border-radius:14px;
+border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;padding:13px}
+#tokbtn{width:100%;max-width:320px;font-size:15px;border-radius:14px;border:none;padding:13px;
+color:#fff;background:linear-gradient(135deg,#7b2ff7,#ff2fb3)}
+/* power modal */
+#modal{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.6);display:flex;
+align-items:center;justify-content:center;padding:30px;backdrop-filter:blur(4px)}
+.card{background:#101425;border:1px solid rgba(255,255,255,.12);border-radius:20px;
+padding:22px;width:100%;max-width:320px;text-align:center}
+.card h3{font-size:16px;margin-bottom:8px}
+.card p{font-size:13px;color:#9db8cc;margin-bottom:16px;line-height:1.5}
+.card .btns{display:flex;gap:10px}
+.card button{flex:1;padding:12px;border-radius:13px;border:1px solid rgba(255,255,255,.15);
+background:rgba(255,255,255,.07);color:#fff;font-size:14px}
+.card button.danger{background:linear-gradient(135deg,#d42f2f,#ff5d5d);border:none}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+<div id="login">
+<h1>FRIDAY</h1>
+<p>Cloud ka <b>CLOUD_TOKEN</b> dalo.<br>sirf pehli baar — phir yaad rahega.<br><span style="font-size:11px">PC off ho tab bhi chat chalegi ☁️</span></p>
+<input id="token" type="password" placeholder="remote token" autocomplete="off">
+<button id="tokbtn">connect</button>
+</div>
+
+<div id="app" class="hidden">
+<header>
+<div class="logo">FRIDAY ☁️</div>
+<div style="display:flex;gap:6px">
+<div id="status"><i></i><span id="slabel">connecting…</span></div>
+<div id="status2"><i></i><span id="pclabel">PC …</span></div>
+</div>
+</header>
+<div id="hero"><canvas id="stage"></canvas><div id="wave"></div></div>
+<div id="chat"></div>
+<div id="quick">
+<button class="q" data-q="time kya ho raha hai">🕐 time</button>
+<button class="q" data-q="notepad khol do">📝 notepad</button>
+<button class="q" data-q="volume 30 kar do">🔉 volume</button>
+<button class="q" id="qfile">🗂️ file dhoondo</button>
+<button class="q" data-q="screen lock kar do">🔒 lock</button>
+<button class="q power" id="qpower">⏻ power</button>
+</div>
+<div class="row"><input type="checkbox" id="speak" style="width:15px;height:15px;accent-color:#ff7ad9">
+<label for="speak">PC ke speakers pe bhi sunao</label></div>
+<div id="bar">
+<button id="mic" title="mic">🎤</button>
+<input id="tin" placeholder="Friday ko bolo…" autocomplete="off" enterkeyhint="send">
+<button id="send" title="bhejo">➤</button>
+</div>
+</div>
+
+<div id="modal" class="hidden">
+<div class="card">
+<h3>⏻ PC power</h3>
+<p>PC band kar dun ya restart?<br>15 second ka warning milega.</p>
+<div class="btns" style="margin-bottom:10px">
+<button class="danger" id="mShutdown">band karo</button>
+<button class="danger" id="mRestart" style="background:linear-gradient(135deg,#b97a2f,#ff9d5d)">restart</button>
+</div>
+<div class="btns"><button id="mCancel">ruko, rehne do</button></div>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ================= reactor FX ================= */
+const FX=(function(){
+  const cv=document.getElementById('stage'),c=cv.getContext('2d');
+  const CYAN='#35e0ff',ICE='#d8f7ff',PINK='#ff7ad9';
+  const PAL=['#ff7ad9','#c77dff','#8ecbff','#ffffff','#ff9de2'];
+  let stars=[],ripples=[],W=0,H=0;
+  const S={mode:'idle',energy:0,t:0,speaking:false};
+  function size(){
+    const r=cv.parentElement.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
+    W=r.width;H=r.height;cv.width=W*dpr;cv.height=H*dpr;c.setTransform(dpr,0,0,dpr,0,0);
+    stars=[];
+    for(let i=0;i<60;i++)stars.push({x:Math.random()*W,y:Math.random()*H,
+      r:.5+Math.random()*1.6,c:PAL[(Math.random()*PAL.length)|0],
+      sp:6+Math.random()*20,dx:-3-Math.random()*7,tw:1+Math.random()*3,
+      ph:Math.random()*6.28,a:.3+Math.random()*.5});
+  }
+  window.addEventListener('resize',size);size();
+  function glow(x,b){c.shadowColor=x;c.shadowBlur=b;}
+  function loop(){
+    const dt=1/60;S.t+=dt;const t=S.t;
+    const target=S.speaking?.45+Math.random()*.5:(S.mode==='thinking'?.5:0);
+    S.energy+=(target-S.energy)*Math.min(1,10*dt);
+    const e=S.energy;
+    c.shadowBlur=0;c.fillStyle='#05060f';c.globalAlpha=.55;c.fillRect(0,0,W,H);c.globalAlpha=1;
+    const boost=1+e*2;
+    stars.forEach(function(s){
+      s.y+=s.sp*boost*dt;s.x+=s.dx*boost*dt;
+      if(s.y>H+4){s.y=-4;s.x=Math.random()*W;}if(s.x<-4)s.x=W+4;
+      c.globalAlpha=s.a*(.55+.45*Math.sin(t*s.tw+s.ph));
+      c.fillStyle=s.c;c.beginPath();c.arc(s.x,s.y,s.r,0,6.29);c.fill();
+    });
+    c.globalAlpha=1;
+    const cxp=W/2,cyp=H/2-6,R=Math.min(W,H)*.30;
+    const spin=S.mode==='thinking'?3.4:(S.speaking?1.8:1);
+    [{r:R,d:[26,14],s:.3,x:CYAN,a:.9,w:3},{r:R*.87,d:[7,11],s:-.45,x:ICE,a:.5,w:2},
+     {r:R*1.12,d:[3,24],s:.14,x:PINK,a:.45,w:2}].forEach(function(rg){
+      c.save();c.strokeStyle=rg.x;c.globalAlpha=rg.a;c.lineWidth=rg.w;
+      c.setLineDash(rg.d);c.lineDashOffset=t*55*rg.s*spin;glow(rg.x,12);
+      c.beginPath();c.arc(cxp,cyp,rg.r,0,6.29);c.stroke();c.restore();
+    });
+    c.setLineDash([]);
+    for(let i=0;i<10;i++){
+      const a=i/10*6.283+t*.18;
+      c.save();c.translate(cxp+Math.cos(a)*R*.62,cyp+Math.sin(a)*R*.62);c.rotate(a+1.5708);
+      const gr=c.createLinearGradient(0,-R*.15,0,R*.15);
+      gr.addColorStop(0,'rgba(53,224,255,.08)');
+      gr.addColorStop(.5,'rgba(216,247,255,'+(.55+e*.45).toFixed(2)+')');
+      gr.addColorStop(1,'rgba(53,224,255,.08)');
+      c.fillStyle=gr;glow(CYAN,10+e*26);
+      const w=R*.16,h=R*.30;
+      c.beginPath();c.moveTo(-w*.42,-h/2);c.lineTo(w*.42,-h/2);
+      c.lineTo(w*.62,h/2);c.lineTo(-w*.62,h/2);c.closePath();c.fill();c.restore();
+    }
+    c.shadowBlur=0;
+    const jx=e*3*Math.sin(t*87),jy=e*3*Math.cos(t*79);
+    const cr=R*.34*(1+e*.55);
+    let g=c.createRadialGradient(cxp+jx,cyp+jy,cr*.2,cxp+jx,cyp+jy,cr*3);
+    g.addColorStop(0,'rgba(53,224,255,'+(.4+e*.55).toFixed(2)+')');
+    g.addColorStop(1,'rgba(53,224,255,0)');
+    c.fillStyle=g;c.beginPath();c.arc(cxp+jx,cyp+jy,cr*3,0,6.29);c.fill();
+    c.save();c.strokeStyle=ICE;c.lineWidth=2.5+e*3;c.globalAlpha=.95;glow(ICE,18+e*36);
+    c.beginPath();c.arc(cxp+jx,cyp+jy,cr*1.25,0,6.29);c.stroke();c.restore();
+    g=c.createRadialGradient(cxp+jx,cyp+jy,1,cxp+jx,cyp+jy,cr);
+    g.addColorStop(0,'#fff');g.addColorStop(.45,ICE);g.addColorStop(.8,CYAN);
+    g.addColorStop(1,'rgba(53,224,255,.25)');
+    c.save();glow(CYAN,30+e*60);c.fillStyle=g;
+    c.beginPath();c.arc(cxp+jx,cyp+jy,cr,0,6.29);c.fill();c.restore();
+    c.shadowBlur=0;
+    if(S.speaking&&Math.random()<.35)ripples.push({r:cr*1.3,a:.8});
+    ripples=ripples.filter(function(p){
+      p.r+=dt*R*3.4;p.a-=dt*1.6;
+      if(p.a<=0||p.r>R*2.4)return false;
+      c.save();c.strokeStyle=ICE;c.globalAlpha=Math.max(0,p.a);c.lineWidth=2.5;glow(ICE,10);
+      c.beginPath();c.arc(cxp,cyp,p.r,0,6.29);c.stroke();c.restore();
+      return true;
+    });
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  return{
+    resize:size,
+    thinking:function(){S.mode='thinking';S.speaking=false;},
+    speak:function(on){S.speaking=!!on;if(on)S.mode='talking';else if(S.mode==='talking')S.mode='idle';},
+    idle:function(){S.mode='idle';S.speaking=false;}
+  };
+})();
+
+/* ================= waveform ================= */
+const waveEl=document.getElementById('wave'),bars=[];
+for(let i=0;i<26;i++){const b=document.createElement('b');waveEl.appendChild(b);bars.push(b);}
+let waveOn=false,waveTimer=null;
+function setWave(on){
+  waveOn=on;
+  if(on&&!waveTimer){
+    waveTimer=setInterval(()=>{
+      bars.forEach((b,i)=>{
+        const v=waveOn?4+Math.random()*26*Math.abs(Math.sin(Date.now()/180+i*.55)):4;
+        b.style.height=v.toFixed(0)+'px';
+      });
+    },90);
+  }else if(!on&&waveTimer){clearInterval(waveTimer);waveTimer=null;
+    bars.forEach(b=>b.style.height='4px');}
+}
+
+/* ================= chat ================= */
+const $=id=>document.getElementById(id);
+let token=localStorage.getItem('friday_cloud_token')||'';
+const H=()=>({'Authorization':'Bearer '+token,'Content-Type':'application/json'});
+const nowT=()=>new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+const ACTION_RE=/```friday-action[\s\S]*?```/gi;
+
+if(token){$('token').value=token;enter();}
+$('tokbtn').onclick=()=>{token=$('token').value.trim();
+  if(!token){alert('token dalo pehle');return;}
+  localStorage.setItem('friday_cloud_token',token);enter();};
+$('token').onkeydown=e=>{if(e.key==='Enter')$('tokbtn').click();};
+
+async function ping(){
+  const t0=performance.now();
+  try{
+    const r=await fetch('/api/status',{headers:H()});
+    if(!r.ok)throw 0;
+    const j=await r.json();
+    const ms=Math.round(performance.now()-t0);
+    $('status').classList.remove('off');
+    $('slabel').textContent='cloud • '+ms+'ms';
+    const pc=$('status2');
+    if(j.pc_online){pc.classList.remove('off');pc.classList.add('on');
+      $('pclabel').textContent='PC online';}
+    else{pc.classList.remove('on');pc.classList.add('off');
+      $('pclabel').textContent='PC offline';}
+  }catch(e){
+    $('status').classList.add('off');
+    $('slabel').textContent='offline';
+  }
+}
+
+async function enter(){
+  try{
+    const r=await fetch('/api/status',{headers:H()});
+    if(!r.ok)throw 0;
+    const j=await r.json();
+    $('login').classList.add('hidden');$('app').classList.remove('hidden');
+    FX.resize(); /* hidden tha to canvas 0-size tha -- ab sahi size lo */
+    ping();setInterval(ping,20000);
+    addMsg('friday','namaste wasim! 🙋‍♀️ mai Friday hun — cloud se connected ☁️ PC off ho tab bhi baat kar sakte ho!');
+    FX.speak(true);setWave(true);
+    setTimeout(()=>{FX.speak(false);setWave(false);},1600);
+  }catch(e){alert('connect nahi hua — token sahi hai? PC pe Friday chal rahi?');}
+}
+
+function addMsg(who,text,act){
+  const d=document.createElement('div');d.className='msg '+who;
+  const s=document.createElement('span');s.textContent=text;d.appendChild(s);
+  const t=document.createElement('span');t.className='ts';t.textContent=nowT();d.appendChild(t);
+  if(act){const a=document.createElement('div');a.className='act';a.textContent='⚙ '+act;d.appendChild(a);}
+  $('chat').appendChild(d);$('chat').scrollTop=$('chat').scrollHeight;
+  return d;
+}
+
+let busy=false;
+async function send(text){
+  text=(text||$('tin').value).trim();if(!text||busy)return;
+  busy=true;$('tin').value='';addMsg('me',text);
+  const tp=document.createElement('div');tp.className='typing';
+  tp.innerHTML='<b></b><b></b><b></b>';
+  $('chat').appendChild(tp);$('chat').scrollTop=$('chat').scrollHeight;
+  FX.thinking();
+  try{
+    const resp=await fetch('/api/chat_stream',{method:'POST',headers:H(),
+      body:JSON.stringify({text,speak:$('speak').checked})});
+    if(!resp.ok||!resp.body)throw new Error('server error '+resp.status);
+    tp.remove();
+    const div=addMsg('friday','…');const span=div.querySelector('span');
+    const reader=resp.body.getReader(),dec=new TextDecoder();
+    let buf='',full='',gotToken=false,final=null;
+    for(;;){
+      const{done,value}=await reader.read();
+      if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf('\n\n'))>=0){
+        const chunk=buf.slice(0,idx);buf=buf.slice(idx+2);
+        for(const line of chunk.split('\n')){
+          if(!line.startsWith('data:'))continue;
+          let ev;try{ev=JSON.parse(line.slice(6));}catch(e){continue;}
+          if(ev.t!==undefined){
+            full+=ev.t;
+            if(!gotToken){gotToken=true;FX.speak(true);setWave(true);}
+            span.textContent=full.replace(ACTION_RE,'').trim()||'…';
+            $('chat').scrollTop=$('chat').scrollHeight;
+          }else if(ev.done){final=ev;}
+        }
+      }
+    }
+    FX.speak(false);setWave(false);
+    if(final){
+      span.textContent=(final.reply||'').trim()||'(koi jawab nahi)';
+      div.querySelector('.ts').textContent=nowT();
+      if(final.action){
+        const a=document.createElement('div');a.className='act';
+        let label='action: '+JSON.stringify(final.action);
+        if(final.action_result)label+=' → '+String(final.action_result).slice(0,120);
+        a.textContent='⚙ '+label;div.appendChild(a);
+      }
+    }else if(!gotToken){
+      span.textContent='⚠ jawab nahi aaya, phir try karo';
+    }
+    $('chat').scrollTop=$('chat').scrollHeight;
+  }catch(e){
+    try{tp.remove();}catch(_){}
+    FX.idle();setWave(false);
+    addMsg('friday','⚠ '+e.message+' (PC online hai?)');
+  }
+  busy=false;
+}
+$('send').onclick=()=>send();
+$('tin').onkeydown=e=>{if(e.key==='Enter')send();};
+document.querySelectorAll('.q[data-q]').forEach(q=>q.onclick=()=>send(q.dataset.q));
+$('qfile').onclick=()=>{
+  const q=prompt('kaunsi file dhoondun? (naam likho)');
+  if(q&&q.trim())send('meri '+q.trim()+' file dhoondo');
+};
+/* power modal */
+$('qpower').onclick=()=>$('modal').classList.remove('hidden');
+$('mCancel').onclick=()=>$('modal').classList.add('hidden');
+async function doPower(op){
+  $('modal').classList.add('hidden');
+  addMsg('me',op==='shutdown'?'⏻ PC band kar do':'↻ PC restart kar do');
+  try{
+    const r=await fetch('/api/power',{method:'POST',headers:H(),
+      body:JSON.stringify({op})});
+    const j=await r.json();
+    if(!r.ok)throw new Error(j.detail||'error');
+    addMsg('friday',j.result||'ho gaya');
+  }catch(e){addMsg('friday','⚠ '+e.message);}
+}
+$('mShutdown').onclick=()=>doPower('shutdown');
+$('mRestart').onclick=()=>doPower('restart');
+/* mic */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+$('mic').onclick=()=>{
+  if(!SR){alert('is browser me mic nahi — type karke bhejo');return;}
+  const rec=new SR();rec.lang='hi-IN';rec.interimResults=false;
+  rec.onresult=e=>send(e.results[0][0].transcript);
+  rec.onerror=()=>addMsg('friday','⚠ mic me dikkat aayi');
+  try{rec.start();addMsg('friday','🎤 sun rahi hun… bolo!');}catch(e){}
+};
+</script>
+</body>
+</html>
