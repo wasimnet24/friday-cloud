@@ -1,4 +1,4 @@
-"""Friday's brain: NVIDIA OpenAI-compatible chat with STREAMING.
+"""Friday's brain: multi-provider auto-failover chat with STREAMING.
 
 Latency design (1-2s first-token target):
   * stream=True -> we speak tokens as they arrive, no waiting for full reply
@@ -20,9 +20,8 @@ import json
 import re
 import time
 
-import requests
-
 import config
+import providers
 from memory.learn import LearnMemory
 
 SYSTEM_PROMPT = """You are Friday, wasim's personal AI assistant. Female, warm, a little playful, \
@@ -101,8 +100,10 @@ class FridayBrain:
     def __init__(self):
         self.history = []  # list of {"role":..., "content":...}
         self.learn = LearnMemory()  # self-learning: corrections -> rules
-        self.offline = not config.NVIDIA_API_KEY or \
-            config.NVIDIA_API_KEY in config.PLACEHOLDER_HINTS
+        # multi-provider router: offline sirf jab koi provider key nahi
+        self.router = providers.ProviderRouter()
+        self.offline = not self.router.has_providers
+        self.last_provider = None
 
     def _system_prompt(self):
         """Base prompt + learned rules (so Friday never repeats a mistake)."""
@@ -116,21 +117,18 @@ class FridayBrain:
 
     # -- low-level streaming -------------------------------------------------
     def _post_stream(self, messages):
-        url = f"{config.NVIDIA_BASE_URL}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {config.NVIDIA_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": config.NVIDIA_MODEL,
-            "messages": messages,
-            "temperature": config.NVIDIA_TEMPERATURE,
-            "max_tokens": config.NVIDIA_MAX_TOKENS,
-            "stream": True,
-        }
-        # stream=True on requests: first token latency ~1-2s on fast models
-        return requests.post(url, headers=headers, json=payload,
-                             stream=True, timeout=60)
+        """Router se pehla healthy provider; fail par auto next.
+
+        Returns (provider_name, response). Sab fail par
+        providers.AllProvidersFailed raise hota hai.
+        """
+        name, resp = self.router.post_stream(
+            messages,
+            max_tokens=config.NVIDIA_MAX_TOKENS,
+            temperature=config.NVIDIA_TEMPERATURE,
+        )
+        self.last_provider = name
+        return resp
 
     def chat_stream(self, user_text):
         """Generator yielding ("token", chunk) live, then ("done", full_text).
@@ -142,7 +140,9 @@ class FridayBrain:
 
         if self.offline:
             reply = ("haan wasim, sun rahi hun! (offline mode hun abhi -- "
-                     ".env me NVIDIA_API_KEY daal do, phir full AI chat chalega.)")
+                     "Render Environment me kisi provider ki API key daal do "
+                     "(VYCEAI_API_KEY, OPENROUTER_API_KEY...), "
+                     "phir full AI chat chalega.)")
             yield ("token", reply)
             yield ("done", reply)
             self.history.append({"role": "assistant", "content": reply})
@@ -152,16 +152,23 @@ class FridayBrain:
         try:
             resp = self._post_stream(messages)
             resp.raise_for_status()
+        except providers.AllProvidersFailed as e:  # sab providers fail
+            detail = str(e)[:200]
+            reply = ("arey wasim, saare AI providers fail ho gaye. "
+                     f"({detail}) thodi der me try karte hain.")
+            yield ("token", reply)
+            yield ("done", reply)
+            self.history.append({"role": "assistant", "content": reply})
+            return
         except Exception as e:  # network/auth failure -> graceful Hindi error
             msg = str(e)
             if "410" in msg or "404" in msg:
-                # model retired/removed by NVIDIA -- not our bug, tell clearly
-                reply = ("arey wasim, lagta hai NVIDIA ne ye AI model band kar "
-                         "diya hai (410 Gone). .env me NVIDIA_MODEL badal do, "
-                         "jaise z-ai/glm-5.3, phir restart karo.")
+                # model retired/removed by provider -- not our bug, tell clearly
+                reply = ("arey wasim, lagta hai provider ne ye AI model band kar "
+                         "diya hai. Render env me model badal do, phir redeploy karo.")
             else:
                 reply = (f"arey wasim, AI se connect nahi ho paya ({e}). "
-                         f"thodi der me try karte hain, ya bolo to PC wala kaam kar dun.")
+                         f"thodi der me try karte hain.")
             yield ("token", reply)
             yield ("done", reply)
             self.history.append({"role": "assistant", "content": reply})

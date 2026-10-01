@@ -25,7 +25,7 @@ from pydantic import BaseModel
 import config
 from brain import FridayBrain, extract_action
 
-VERSION = "1.9-cloud"
+VERSION = "2.0-cloud"
 PC_TIMEOUT = 50          # itne sec me poll na aaye to PC offline
 POLL_WAIT = 25           # long-poll kitni der command ka wait kare
 DISPATCH_TIMEOUT = 35    # chat request PC result ka kitna wait kare
@@ -166,7 +166,9 @@ def api_status(authorization: str = Header(default="")):
     _auth(authorization)
     return {"ok": True, "cloud": True, "version": VERSION,
             "pc_online": pc_online(),
-            "brain_offline": _brain.offline}
+            "brain_offline": _brain.offline,
+            "ai_providers": _brain.router.status(),
+            "last_provider": _brain.last_provider}
 
 
 # -- pc link endpoints -------------------------------------------------------------
