@@ -137,6 +137,7 @@ background:rgba(255,255,255,.07);color:#fff;font-size:14px}
 <label for="speak">PC ke speakers pe bhi sunao</label></div>
 <div id="bar">
 <button id="mic" title="mic">🎤</button>
+<button id="voice" title="awaz on/off">🔊</button>
 <input id="tin" placeholder="Friday ko bolo…" autocomplete="off" enterkeyhint="send">
 <button id="send" title="bhejo">➤</button>
 </div>
@@ -267,6 +268,38 @@ const H=()=>({'Authorization':'Bearer '+token,'Content-Type':'application/json'}
 const nowT=()=>new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 const ACTION_RE=/```friday-action[\s\S]*?```/gi;
 
+/* ===== browser voice: reply aate hi phone/browser khud bolega ===== */
+let voiceOn=true;
+function pickHindiVoice(){
+  if(!window.speechSynthesis)return null;
+  const vs=speechSynthesis.getVoices()||[];
+  return vs.find(v=>/hi[-_]IN/i.test(v.lang))
+      || vs.find(v=>/^hi/i.test(v.lang))
+      || vs.find(v=>/hindi/i.test(v.name))
+      || null;
+}
+if(window.speechSynthesis){
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged=()=>{try{speechSynthesis.getVoices();}catch(e){}};
+}
+function voiceSay(text){
+  if(!voiceOn||!window.speechSynthesis)return;
+  try{
+    text=String(text||"").replace(ACTION_RE,"").trim();
+    if(!text)return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    const v=pickHindiVoice();
+    if(v){u.voice=v;u.lang=v.lang;}else{u.lang='hi-IN';}
+    u.rate=1;u.pitch=1.05;
+    u.onstart=()=>{ttsSpeaking=true;if(typeof rec!=="undefined"&&rec){try{rec.abort();}catch(e){}rec=null;}FX.speak(true);setWave(true);};
+    u.onend=u.onerror=()=>{ttsSpeaking=false;FX.speak(false);setWave(false);if(typeof micOn!=="undefined"&&micOn)micStart();};
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+$('voice').onclick=()=>{voiceOn=!voiceOn;$('voice').textContent=voiceOn?'🔊':'🔇';
+  if(!voiceOn&&window.speechSynthesis){try{speechSynthesis.cancel();}catch(e){}};};
+
 if(token){$('token').value=token;enter();}
 $('tokbtn').onclick=()=>{token=$('token').value.trim();
   if(!token){alert('token dalo pehle');return;}
@@ -302,6 +335,7 @@ async function enter(){
     FX.resize(); /* hidden tha to canvas 0-size tha -- ab sahi size lo */
     ping();setInterval(ping,20000);
     addMsg('friday','namaste wasim! 🙋‍♀️ mai Friday hun — cloud se connected ☁️ PC off ho tab bhi baat kar sakte ho!');
+    voiceSay('namaste wasim! mai Friday hun — cloud se connected. PC off ho tab bhi baat kar sakte ho!');
     FX.speak(true);setWave(true);
     setTimeout(()=>{FX.speak(false);setWave(false);},1600);
   }catch(e){alert('connect nahi hua — token sahi hai? PC pe Friday chal rahi?');}
@@ -354,6 +388,7 @@ async function send(text){
     FX.speak(false);setWave(false);
     if(final){
       span.textContent=(final.reply||'').trim()||'(koi jawab nahi)';
+      voiceSay(final.reply);
       div.querySelector('.ts').textContent=nowT();
       if(final.action){
         const a=document.createElement('div');a.className='act';
@@ -395,14 +430,44 @@ async function doPower(op){
 }
 $('mShutdown').onclick=()=>doPower('shutdown');
 $('mRestart').onclick=()=>doPower('restart');
-/* mic */
+/* mic — hands-free: ek baar dabao, phir Friday jawab deke khud sunne lagegi */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let micOn=false, rec=null, ttsSpeaking=false, micErrCount=0;
+function micStart(){
+  if(!SR||!micOn)return;
+  if(ttsSpeaking||busy){setTimeout(micStart,800);return;} /* Friday busy hai — thoda ruk ke phir try */
+  if(rec){return;} /* pehle se sun raha hai */
+  rec=new SR();rec.lang='hi-IN';rec.interimResults=false;rec.continuous=false;
+  rec.onresult=e=>{
+    micErrCount=0;
+    const txt=e.results[0][0].transcript;
+    try{rec.abort();}catch(_){}
+    send(txt);
+  };
+  rec.onerror=e=>{
+    const err=(e&&e.error)||'';
+    if(err==='not-allowed'||err==='service-not-allowed'){
+      micSet(false);addMsg('friday','⚠ mic ki permission nahi mili — browser settings me allow karo');
+    }else if(err==='audio-capture'){
+      if(++micErrCount>=3){micSet(false);addMsg('friday','⚠ mic nahi mil raha');}
+    }
+  };
+  rec.onend=()=>{
+    rec=null;
+    if(micOn)setTimeout(micStart,400); /* continuous: phir se suno (micStart khud wait karega agar Friday busy hai) */
+  };
+  try{rec.start();}catch(e){}
+}
+function micSet(on){
+  micOn=on;
+  $('mic').textContent=on?'🔴':'🎤';
+  $('mic').style.boxShadow=on?'0 0 14px #ff5d5d':'';
+  if(!on&&rec){try{rec.abort();}catch(e){}rec=null;}
+  if(on){micErrCount=0;addMsg('friday','🎤 hands-free on — bolo, mai sun rahi hun! (band karne ke liye phir dabao)');micStart();}
+}
 $('mic').onclick=()=>{
   if(!SR){alert('is browser me mic nahi — type karke bhejo');return;}
-  const rec=new SR();rec.lang='hi-IN';rec.interimResults=false;
-  rec.onresult=e=>send(e.results[0][0].transcript);
-  rec.onerror=()=>addMsg('friday','⚠ mic me dikkat aayi');
-  try{rec.start();addMsg('friday','🎤 sun rahi hun… bolo!');}catch(e){}
+  micSet(!micOn);
 };
 </script>
 </body>
