@@ -175,7 +175,11 @@ class FridayBrain:
             return
 
         full = []
-        for line in resp.iter_lines(decode_unicode=True):
+        # NOTE: decode_unicode=True mat use karo -- kuch providers charset header
+        # nahi bhejte aur requests ISO-8859-1 guess karke Devanagari bigaad deta
+        # hai (mojibake). Hamesha explicit UTF-8 decode karo.
+        for raw in resp.iter_lines():
+            line = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
             if not line or not line.startswith("data:"):
                 continue
             data = line[5:].strip()
