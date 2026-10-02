@@ -390,7 +390,15 @@ async function send(text){
       span.textContent=(final.reply||'').trim()||'(koi jawab nahi)';
       voiceSay(final.reply);
       div.querySelector('.ts').textContent=nowT();
-      if(final.action){
+      if(final.actions&&final.actions.length){
+        /* multi-step: har action ka apna chip */
+        for(const r of final.actions){
+          const a=document.createElement('div');a.className='act';
+          let label='action: '+JSON.stringify(r.action);
+          if(r.result)label+=' → '+String(r.result).slice(0,120);
+          a.textContent='⚙ '+label;div.appendChild(a);
+        }
+      }else if(final.action){
         const a=document.createElement('div');a.className='act';
         let label='action: '+JSON.stringify(final.action);
         if(final.action_result)label+=' → '+String(final.action_result).slice(0,120);
@@ -467,6 +475,13 @@ function micSet(on){
 }
 $('mic').onclick=()=>{
   if(!SR){alert('is browser me mic nahi — type karke bhejo');return;}
+  if(ttsSpeaking){
+    /* BARGE-IN: Friday bol rahi hai, wasim beach me bola -- usko roko, suno */
+    try{speechSynthesis.cancel();}catch(e){}
+    ttsSpeaking=false;FX.speak(false);setWave(false);
+    if(!micOn)micSet(true);else micStart();
+    return;
+  }
   micSet(!micOn);
 };
 </script>

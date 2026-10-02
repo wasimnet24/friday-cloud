@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel
 
 import config
-from brain import FridayBrain, extract_action
+from brain import FridayBrain
 
 VERSION = "2.0-cloud"
 PC_TIMEOUT = 50          # itne sec me poll na aaye to PC offline
@@ -82,11 +82,35 @@ def cloud_action_runner(name, args):
         return f"cloud link me dikkat: {e}"
 
 
-def _fix_reply(reply: str, result: str) -> str:
-    """Agar PC action fail/offline hua to jhootha 'ho gaya' mat bolo."""
-    low = (result or "").lower()
-    if any(k in low for k in ("offline", "timeout", "jawab nahi", "dikkat")):
-        return (reply or "").rstrip() + f" (lekin {result})"
+def _fix_reply(reply: str, results) -> str:
+    """Jhootha 'ho gaya' kabhi mat rehne do.
+
+    results: action results ki list (strings). Agar koi action fail/uncertain/
+    offline hua to model ke optimistic daave ko kaato aur saaf-saaf batao.
+    """
+    if isinstance(results, str):
+        results = [results]
+    lows = [(r or "").lower() for r in (results or [])]
+    if not lows or not any(lows):
+        return reply
+    # PC offline / timeout: purana behavior (bracket me saaf wajah)
+    if any(any(k in low for k in ("offline", "timeout", "jawab nahi"))
+           for low in lows):
+        joined = "; ".join(r for r in results if r)
+        return (reply or "").rstrip() + f" (lekin {joined})"
+    fail_words = ("nahi khul", "nahi mil", "nahin", "dikkat", "fail",
+                  "error", "koshish", "galat", "unable", "confirm_needed")
+    ok_words = ("khol diya", "kar diya", "mil gayi", "band kar diya",
+                "ho gaya", "bhej diya", "save ho gaya", "note kar liya")
+    bad = [r for r, low in zip(results, lows)
+           if any(w in low for w in fail_words)
+           and not any(w in low for w in ok_words)]
+    if bad:
+        # model ne "ho gaya" bola hoga -- usko kaato, imaandaar jawab do
+        joined = "; ".join(bad)
+        if joined.startswith("CONFIRM_NEEDED:"):
+            return "pakka wasim? ye kaam thoda risky hai -- haan bolo to kar dun."
+        return f"arey wasim, {joined}"
     return reply
 
 
@@ -103,9 +127,11 @@ def api_chat(body: ChatBody, authorization: str = Header(default="")):
         raise HTTPException(status_code=400, detail="text khaali hai")
     result = _brain.handle_user_text(text, action_runner=cloud_action_runner)
     reply = result.get("reply") or ""
-    if result.get("action"):
-        reply = _fix_reply(reply, result.get("action_result") or "")
-    return {"ok": True, "reply": reply, "action": result.get("action"),
+    ran = result.get("actions") or []
+    if ran:
+        reply = _fix_reply(reply, [r["result"] for r in ran])
+    return {"ok": True, "reply": reply, "actions": ran,
+            "action": result.get("action"),
             "action_result": result.get("action_result"),
             "pc_online": pc_online()}
 
@@ -118,29 +144,37 @@ def api_chat_stream(body: ChatBody, authorization: str = Header(default="")):
         raise HTTPException(status_code=400, detail="text khaali hai")
 
     def gen():
-        action = None
         try:
             for kind, payload in _brain.chat_stream(text):
                 if kind == "token":
                     yield "data: " + json.dumps({"t": payload},
                                                 ensure_ascii=False) + "\n\n"
                 elif kind == "done":
-                    action, spoken = extract_action(payload)
-                    result = None
-                    if action:
-                        result = cloud_action_runner(action.get("action"),
-                                                     action.get("args") or {})
+                    from brain import extract_actions
+                    actions, spoken = extract_actions(payload)
+                    ran = []
+                    for action in actions:
+                        try:
+                            res = cloud_action_runner(action.get("action"),
+                                                      action.get("args") or {})
+                        except Exception as e:
+                            res = f"action me dikkat: {e}"
+                        ran.append({"action": action, "result": res})
+                        if isinstance(res, str) and res.startswith("CONFIRM_NEEDED"):
+                            break
                     reply = spoken or payload
-                    if action:
-                        reply = _fix_reply(reply, result or "")
+                    if ran:
+                        reply = _fix_reply(reply, [r["result"] for r in ran])
                     yield "data: " + json.dumps(
-                        {"done": True, "reply": reply, "action": action,
-                         "action_result": result, "pc_online": pc_online()},
+                        {"done": True, "reply": reply, "actions": ran,
+                         "action": ran[0]["action"] if ran else None,
+                         "action_result": ran[0]["result"] if ran else None,
+                         "pc_online": pc_online()},
                         ensure_ascii=False) + "\n\n"
         except Exception as e:
             yield "data: " + json.dumps(
                 {"done": True, "reply": f"arey wasim, dikkat aayi: {e}",
-                 "action": None, "action_result": None,
+                 "actions": [], "action": None, "action_result": None,
                  "pc_online": pc_online()},
                 ensure_ascii=False) + "\n\n"
 

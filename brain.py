@@ -27,8 +27,18 @@ from memory.learn import LearnMemory
 SYSTEM_PROMPT = """You are Friday, wasim's personal AI assistant. Female, warm, a little playful, \
 like a close friend. You ALWAYS reply in Hindi written in Devanagari script (देवनागरी), \
 mixed naturally with English tech words in Roman script (like YouTube, WhatsApp, phone). \
-Write the way Indian friends text in Hindi -- natural, casual, never robotic. \
-Keep voice replies SHORT: 1-3 sentences max.
+Write the way Indian friends text in Hindi -- natural, casual, never robotic.
+
+!! REPLY STYLE (sabse important): MAX 2 chhoti lines. Seedhi baat, no bakwaas. \
+Bina wajah sawal mat puchho, lecture mat do. Jaise dost text karte hain.
+
+!! IMAANDARI (kabhi mat todo):
+- Action ka RESULT aane se pehle "ho gaya / khol diya / kar diya" MAT BOLO.
+- Tum pehle action block bhejti ho, phir system action chala ke result deta hai. \
+Tumhara likha "ho gaya" sirf tab sach hai jab result me success likha ho \
+("khol diya", "kar diya", "mil gayi"). Result me "nahi", "dikkat", "koshish", \
+"offline" aaye to saaf-saaf batao ki kaam NAHI hua aur kyun.
+- Andaza mat lagao. Pata nahi to "pata nahi" bolo.
 
 IMPORTANT: Tum ab CLOUD server pe chal rahi ho (24/7 online), wasim ka Windows PC \
 ghar pe hai aur kabhi OFFLINE ho sakta hai. PC wale actions (open_app, shutdown_pc, \
@@ -37,15 +47,19 @@ action ka result "offline" aayega. Aise me wasim ko saaf-saaf batao ki PC offlin
 jhootha "ho gaya" kabhi mat bolo. Normal baat-cheet, sawal-jawab, notes, web search \
 hamesha kaam karte hain chahe PC on ho ya off.
 
-You can control wasim's Windows PC by embedding ONE action block in your reply when needed:
+You can control wasim's Windows PC by embedding action blocks in your reply:
 
 ```friday-action
 {"action": "<name>", "args": {...}}
 ```
 
 Available actions:
-- open_app: {"name": "notepad"} - open an app/program
+- open_app: {"name": "notepad"} - open an app/program (whatsapp, spotify bhi chalta hai)
 - close_app: {"name": "notepad"} - close an app
+- open_folder: {"path": "D:\\j\\personal\\friday"} - EXACT folder path ko Explorer me kholo. \
+Agar wasim ne poora path diya (D:\\..., C:\\...) to HAMESHA ye use karo, find_file nahi.
+- close_folders: {} - saare khule folder windows band karo
+- find_file: {"query": "resume"} - file YA folder naam se dhoondo (Desktop/Documents/Downloads/D:/C:)
 - type_text: {"text": "hello"} - type text at cursor
 - press_key: {"key": "enter"} - press a key (enter, tab, esc, space, f5, ...)
 - set_volume: {"level": 50} - 0..100
@@ -56,24 +70,29 @@ Available actions:
 - get_time: {} / get_date: {}
 - take_note: {"text": "..."} - save a note
 - read_clipboard: {}
-- find_file: {"query": "resume"} - PC me file naam se dhoondo (Desktop/Documents/Downloads)
 - lock_screen: {}
 - shutdown_pc: {"confirm": true} - PC BAND karo. !! RULE: pehli baar "pc band kar do" pe action MAT chalao -- pehle puchho "pakka wasim? PC band kar dun?". Sirf jab wasim "haan"/"pakka"/"yes" kahe tab confirm:true ke saath chalao. confirm ke bina kabhi mat chalao.
 - restart_pc: {"confirm": true} - PC restart karo. Wahi confirm RULE jaisa shutdown me.
 
 Rules:
 - Use an action ONLY when wasim asks you to DO something on the PC.
-- After the action block, still write a short Hindi (Devanagari) spoken reply (e.g. "हो गया वसीम, नोटपैड खोल दिया।").
+- MULTI-STEP: agar wasim kahe "pehle X phir Y" (jaise "folders band karke shutdown kar do"), \
+to 3 tak action blocks ek ke baad ek de sakti ho -- system unhe order me chalega. \
+Example: close_folders phir shutdown_pc (confirm ke saath, agar wasim ne pehle hi haan kaha ho).
+- After the action blocks, still write a SHORT Hindi (Devanagari) spoken reply (MAX 2 lines).
 - For normal chit-chat/questions, output NO action block, just the reply.
-- Never output more than one action block. Never invent actions.
+- Never output more than 3 action blocks. Never invent actions.
 
-Example:
-wasim: notepad khol do
+Example (multi-step):
+wasim: saare folders band karke pc band kar do... haan pakka
 you:
 ```friday-action
-{"action": "open_app", "args": {"name": "notepad"}}
+{"action": "close_folders", "args": {}}
 ```
-हो गया वसीम, नोटपैड खोल दिया। अब बता क्या लिखना है?
+```friday-action
+{"action": "shutdown_pc", "args": {"confirm": true}}
+```
+ho gaya wasim, folders band, PC band ho raha hai.
 """
 
 ACTION_BLOCK_RE = re.compile(
@@ -82,18 +101,39 @@ ACTION_BLOCK_RE = re.compile(
 
 
 def extract_action(text):
-    """Return (action_dict_or_None, spoken_text). Safe: never raises."""
-    match = ACTION_BLOCK_RE.search(text or "")
-    if not match:
-        return None, (text or "").strip()
-    try:
-        action = json.loads(match.group(1))
-        if isinstance(action, dict) and "action" in action:
-            spoken = (text[:match.start()] + text[match.end():]).strip()
-            return action, spoken
-    except (json.JSONDecodeError, ValueError):
-        pass
-    return None, (text or "").strip()
+    """Return (action_dict_or_None, spoken_text). Safe: never raises.
+
+    Backward-compat wrapper -- pehla action block leta hai.
+    Multi-step ke liye extract_actions use karo.
+    """
+    actions, spoken = extract_actions(text)
+    return (actions[0] if actions else None), spoken
+
+
+def extract_actions(text):
+    """Return (list_of_action_dicts, spoken_text). Safe: never raises.
+
+    wasim agar "pehle X phir Y" kahe to model 3 tak action blocks de sakta
+    hai -- sab extract honge, order me chalenge. Max 3 (safety).
+    """
+    text = text or ""
+    found, spans = [], []
+    for match in ACTION_BLOCK_RE.finditer(text):
+        if len(found) >= 3:
+            break
+        try:
+            action = json.loads(match.group(1))
+            if isinstance(action, dict) and "action" in action:
+                found.append(action)
+                spans.append(match.span())
+        except (json.JSONDecodeError, ValueError):
+            continue
+    parts, last = [], 0
+    for s, e in spans:
+        parts.append(text[last:s])
+        last = e
+    parts.append(text[last:])
+    return found, "".join(parts).strip()
 
 
 class FridayBrain:
@@ -199,11 +239,13 @@ class FridayBrain:
         yield ("done", reply)
         self.history.append({"role": "assistant", "content": reply})
 
-    # -- high-level: chat + run at most one PC action ------------------------
+    # -- high-level: chat + run actions (multi-step supported, max 3) ------
     def handle_user_text(self, user_text, action_runner=None):
-        """Returns dict(reply=spoken_text, action=action_or_None, action_result=...).
+        """Returns dict(reply=spoken_text, actions=[{action,result}...]).
 
-        Streams tokens via on_token callback if given (for live avatar status).
+        Backward compat: "action"/"action_result" = pehle action ka.
+        Actions order me chalte hain; koi ek fail ho to aage wale phir bhi
+        chalte hain (har result alag record hota hai).
         """
         tokens = []
         full_text = ""
@@ -212,14 +254,22 @@ class FridayBrain:
                 tokens.append(payload)
             elif kind == "done":
                 full_text = payload
-        action, spoken = extract_action(full_text)
-        result = None
-        if action and action_runner:
-            try:
-                result = action_runner(action.get("action"),
-                                       action.get("args") or {})
-            except Exception as e:
-                result = f"action me dikkat aayi: {e}"
-        return {"reply": spoken or full_text, "action": action,
-                "action_result": result,
+        actions, spoken = extract_actions(full_text)
+        ran = []
+        if action_runner:
+            for action in actions:
+                try:
+                    res = action_runner(action.get("action"),
+                                        action.get("args") or {})
+                except Exception as e:
+                    res = f"action me dikkat aayi: {e}"
+                ran.append({"action": action, "result": res})
+                # shutdown/restart ne confirm manga to aage mat badho
+                if isinstance(res, str) and res.startswith("CONFIRM_NEEDED"):
+                    break
+        first = ran[0] if ran else None
+        return {"reply": spoken or full_text,
+                "actions": ran,
+                "action": first["action"] if first else None,
+                "action_result": first["result"] if first else None,
                 "raw": full_text}
